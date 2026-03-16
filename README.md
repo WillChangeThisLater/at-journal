@@ -1,28 +1,12 @@
-# Paul's Appalachian Trail Journal
+# Appalachian Trail Journal
 
-A minimalist, terminal-friendly blog for documenting my Appalachian Trail journey.
+A minimalist blog for documenting my trials and tribulations on the A.T.
 
 ## Quick Start
 
 ```bash
-cd /home/paul/repos/journal
-python3 scripts/server.py
-# Access via: http://localhost:8080
-```
-
-Or with Python's built-in server:
-```bash
 python3 -m http.server 8000
-# Access via: http://localhost:8000
 ```
-
-## Viewing in Lynx
-
-```bash
-lynx http://localhost:8080
-```
-
-Or in a regular browser: `http://localhost:8080`
 
 ## Directory Structure
 
@@ -61,25 +45,3 @@ journal/
        <p><a href="post-NNN.html">Read more →</a></p>
    </article>
    ```
-
-## Features
-
-- **Progress Bar**: Shows current mileage vs. total goal (2,160 mi)
-- **Current Location**: Display where you are on the trail
-- **Blog Posts**: Chronological trail updates
-- **Terminal-First**: Works perfectly in Lynx and other text browsers
-- **Static**: No database or backend required
-- **Minimalist**: Pure HTML/CSS, no JavaScript
-
-## Trail Progress
-
-- **Total Distance**: 2,160 miles
-- **Current Progress**: 0 miles (0%)
-- **Current Location**: Not yet started
-- **Start Date**: TBD
-
-## Notes
-
-- The site is designed to be minimalist and work in the simplest browsers
-- No JavaScript is required - works in Lynx, links, and other text-only browsers
-- Static site - no database or backend required
