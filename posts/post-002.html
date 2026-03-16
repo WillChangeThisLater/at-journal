@@ -125,10 +125,10 @@ So why did I even get this thing? Customizability! You can customize a pinephone
 My goal is simple: I want to use the pinephone as my main programming environment on the trail. I've been modding the phone out for a couple weeks with this in mind. Here's where I'm at so far:
 
   <ul>
-  <li>When I got the phone, I immediately switched it over to use postmarketos as the OS, with sxmo as the windowing layer. This are fascinating pieces of software that deserve their own blog posts. The main benefit here is hackability: sxmo provides primitives for rotating the screen, sending notifications to the system, etc.</li>
+  <li>When I got the phone, I immediately switched it over to use postmarketos as the OS, with sxmo as the windowing layer. These are fascinating pieces of software that deserve their own blog posts. The main benefit here is hackability: sxmo provides primitives for rotating the screen, sending notifications to the system, etc.</li>
   <li>I got my "core software" set up: `tmux`, `git`, `lynx`, `python`, `ssh`. I modified my tmux config a bunch to show battery status, memory usage, and system load. I used bluetoothctl to configure a connection to my logitech 380 keyboard, which is a must have since the on screen keyboard is shit</li>
   <li>Astoundingly, I was able to get `llama.cpp` to run a very tiny LLM, Qwen3.5-0.8B.Q3_K_M. This is the most lightweight of qwen's models, and fits pretty comfortably in my 3Gb RAM. In fact, it fits so comfortably that I was actually able to add an mmproj file for multi modal output! The system runs at 3 toks/sec on a good day and is an absolute power drain, but it's technologically astounding it works at all. Though I'm not trusting it for survival advice anytime soon...</li>
-  <li>A friend (<a href="owenthe.dev">Owen</a>) helped me reason through battery calculations, and I came to the conclusion that the stock settings I was running would kill my battery! With his help, I went on a battery saving crusade. I went way overboard on this</li>
+  <li>A friend (<a href="https://owenthe.dev">Owen</a>) helped me reason through battery calculations, and I came to the conclusion that the stock settings I was running would kill my battery! With his help, I went on a battery saving crusade. I went way overboard on this</li>
 
   <ul>
     <li>Auto-dim screen to low light setting (saves a bunch of battery)</li>
@@ -144,10 +144,10 @@ My goal is simple: I want to use the pinephone as my main programming environmen
 
 It's hard to say how well this setup will stand up to the elements, but my at-home-ideal-conditions tests make me optimistic. Time will tell!
 
-So what am I actually going to do with this thing? Well, getting llama-server running got me thinking that maybe I could use this phone to explore LLM interperability on the edge. My plan is to start hacking on <a href="https://github.com/ggml-org/ggml/tree/master/examples/gpt-2">gpt2 running on ggml</a>. I'm curious about a bunch of things, don't really have a fixed plan since all this is highly experimental.
+So what am I actually going to do with this thing? Well, getting llama-server running got me thinking that maybe I could use this phone to explore LLM interperability on the edge. My plan is to start hacking on <a href="https://github.com/ggml-org/ggml/tree/master/examples/gpt-2">gpt2 running on ggml</a>. I'm curious about a bunch of things, though I don't really have a fixed plan since I know next to nothing about ML model architecture and all these questions are highly subjective and experimental.
 
-  * What happens when I make modifications to different layers in the model? Can I determine what layers of the model impact grammar/mood/etc. based on the responses I get from the model?
-  * What happens when I make modifications to the computation graph itself? Are there certain operations that are more or less important?
+  <li>What happens when I make modifications to different layers in the model? Can I determine what layers of the model impact grammar/mood/etc. based on the responses I get from the model?</li>
+  <li>What happens when I make modifications to the computation graph itself? Are there certain operations that are more or less important?</li>
 
             </p>
         </article>
