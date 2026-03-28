@@ -1,0 +1,511 @@
+hello friends!
+
+i'm writing about a curious rabbit hole i fell down preparing my pinephone for the rigors of the appalachain trail.
+i'm doing this selfishly and mostly so the stuff i learned sticks in my head.
+the most interesting thing is my AI setup, which has been useful for debugging some relativley low level issues on the pinephone. i'll discuss that first
+i'll also attempt to give a deep dive into the issue and what pi-agent and i debugged and fixed.
+that means a lot of technical mumbo jumbo which is probably not going to be engaging for those of you who are less interested in
+operating and file systems. if that's not your jam no worries! just read the first part and stop when you see the notes section.
+
+# AI dev setup
+my setup: 
+
+  * `gpt-5.1-codex-mini` with thinking off (the horror!)
+  * `pi-agent`
+  * `tmux`
+
+tmux is a terminal multiplexer. i love tmux and use it with everything, including pi-agent. i have a tmux skill that helps pi-agent interact with a tmux pane. i can say something like
+
+  "run commands against my pinephone. you can use this pane: pinephone.pi-agent:1. pinephone.pi-agent:1 is SSH'd into the pinephone"
+
+and it'll run commands directly on the pinephone over the SSH connection. that's nifty since it lets the agent poke around the pinephone directly
+
+<add gif showing setup here>
+
+i did all my work in a tmux session called `pinephone` with a window called `pi-agent`. my setup was simple: just two panes. the top pane is running `pi-agent`, the bottom is ssh'd into the pinephone.
+that's it! sometimes the agent does need help though (e.g. if it needs to
+run a command with 'sudo'), and it's instructed to ask for it. though sometimes i will get lazy and give the agent the sudo password (147147, the system default) 
+
+gpt-5.1-codex-mini with thinking off is... not the brightest. i've tricked myself into thinking this is a good thing. the frontier models now are so strong they
+often get to my answer immediately and effortlessly. this usually requires little to no thinking on my part. helpful when i just need something done, but less helpful when
+i want to actually learn something. gpt-5.1-codex-mini isn't always right and screws up frequently, which is a feature since it means i have to think carefully when i'm interacting with it.
+
+to be honest i don't think i would have taken this much of a deep dive without an llm at my side. it's an incredible scout if you
+ask it good questions. i would never have done something like open up an initramfs file by myself, it would have been too foreign territory.
+this really excites me - i feel much more confident doing low level programming, an electronics project, etc. with an llm at my side.
+
+one broader takeaway for myself: i am starting to prefer real and tangible projects above all else. projects where you have real imperative proof that the
+thing works or it doesn't. llms are good for this since they can't dunning kruger you - you can see visually when a phone
+gose from failed boot to "starting".
+
+here's the base system prompt i used for my agent. it's about 150 lines long and fairly technical. it worked quite well.
+
+    (show this in a scollbox! only 5% of people will read this thing)
+    ```
+    # Goal
+    I am modding out a pinephone. I will use this pinephone as my main programming device for a long hike.
+    
+    I recently realized that the phone was running 100% off my SD card. The phone has 32Gb of EMMC but is not using any of it 
+    
+    Here's the output of 'df'. You can see that there is one device, mmcblk0p2, mounted at root.
+    
+    ```bash
+    pine64-pinephone:~/repos/trail/slim$ df -h /
+    Filesystem      Size  Used Avail Use% Mounted on
+    /dev/mmcblk0p2   29G  9.7G   18G  36% /
+    ```
+    
+    And here's the output of lsblk. You can see there are two ~32Gb devices: mmcblk0 (the SD card) and mmcblk2 (the EMMC). The reason I think mmcblk2 is EMMC is because it has a few 'hardcoded' boot partitions (mmcblk2boot0, mmcblk2boot1) that would not exist on the SD card.
+    
+    ```bash
+    pine64-pinephone:~/repos/trail/slim$ lsblk
+    NAME         MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+    mmcblk0      179:0    0 29.1G  0 disk
+    ├─mmcblk0p1  179:1    0  243M  0 part /boot
+    └─mmcblk0p2  179:2    0 28.9G  0 part /
+    mmcblk2      179:32   0 28.9G  0 disk
+    ├─mmcblk2p1  179:33   0  243M  0 part /mnt/emmcboot
+    └─mmcblk2p2  179:34   0 28.7G  0 part /mnt/emmcroot
+    mmcblk2boot0 179:64   0    4M  1 disk
+    mmcblk2boot1 179:96   0    4M  1 disk
+    zram0        253:0    0  512M  0 disk [SWAP]
+    zram1        253:1    0    2G  0 disk
+    ```
+    
+    At first, I tried to copy the files from mmcblk0p1 -> mmcblk2p1 and mmcblk0p2 -> mmcblk2p2 directly using `dd`. That looked something like:
+    
+    ```bash
+    sudo dd if=/dev/mmcblk0 or=/dev/mmcblk2 bs=4M status=progress conv=sync,noerror
+    ```
+    
+    However, when I tried to validate the EMMC partitions I hit an error! The problem is that the SD card's root partition is _slightly_ larger than EMMC. When we use 'dd' to copy the file system literally it copies the number of blocks the file system supports. This causes an error since the number of blocks that can be supported on the EMMC is slightly less than what can be supported on the SD card.
+    
+    The option Claude gave me at this point was to downsize the file system on the SD card. This bugged me for a couple reasons though:
+    
+      * It's cumbersome: I don't want to have to downsize the SD card root partition, `dd` copy, then upsize again.
+      * It's annoying. I can't downsize the partition "live" on my pinphone. Instead, I have to take the SD card out of the phone, load it into a machine that has an SD reader, then presumably resize with something like GParted.
+      * ^ because of these it also seems a bit risky. what if I screw up? I do not want to lose progress
+    
+    I told Claude this, and it gave me an alternative solution. Instead of using `dd` to do a block-level copy, we can (a) add file systems to the EMMC partitions directly using `mkfs`, (b) mount those file systems at /mnt/emmcboot, /mnt/emmcroot, and (c) use rsync to copy files over. The whole setup looks roughly like this:
+    
+    ## Set up the boot partition
+    ```bash
+    # use vfat file system for boot partition
+    sudo mkfs.vfat -F32 /dev/mmcblk2p1
+    # mount that partition to /mnt/emmcboot
+    sudo mkdir -p /mnt/emmcboot
+    sudo mount /dev/mmcblk2p1 /mnt/emmcboot
+    # rsync files from our local system (using SD card) to mounted boot partition
+    sudo rsync -aH --numeric-ids --progress --no-perms --no-owner --no-group /boot/ /mnt/emmcboot/
+    ```
+    
+    ## Set up the root partition
+    ```bash
+    # use vfat file system for root partition
+    sudo mkfs.ext4 -F32 /dev/mmcblk2p2
+    # mount that partition to /mnt/emmcroot
+    sudo mkdir -p /mnt/emmcroot
+    sudo mount /dev/mmcblk2p2 /mnt/emmcroot
+    # rsync files from our local system (using SD card) to mounted boot partition
+    sudo rsync -aHAX --numeric-ids --progress --exclude=/mnt --exclude=/dev --exclude=/tmp --exclude=/proc --exclude=/sys --exclude=/run / /mnt/emmcroot
+    ```
+    
+    ## Verification
+    ```bash
+    pine64-pinephone:~/repos/trail/slim$ # unmount the partitions
+    pine64-pinephone:~/repos/trail/slim$ sudo umount /mnt/emmcroot
+    pine64-pinephone:~/repos/trail/slim$ sudo umount /mnt/emmcboot
+    pine64-pinephone:~/repos/trail/slim$ # run file system consistency checks
+    pine64-pinephone:~/repos/trail/slim$ sudo fsck.ext4 /dev/mmcblk2p2
+    e2fsck 1.47.3 (8-Jul-2025)
+    /dev/mmcblk2p2: clean, 184054/1880480 files, 2692856/7515136 blocks
+    pine64-pinephone:~/repos/trail/slim$ su
+    do fsck.vfat /dev/mmcblk2p1
+    fsck.fat 4.2 (2021-01-31)
+    There are differences between boot sector and its backup.
+    This is mostly harmless. Differences: (offset:original/backup)
+      65:01/00
+    1) Copy original to backup
+    2) Copy backup to original
+    3) No action
+    [123?q]?
+    pine64-pinephone:~/repos/trail/slim$ # ^ not sure why this flagged
+    pine64-pinephone:~/repos/trail/slim$ # mount the partitions
+    pine64-pinephone:~/repos/trail/slim$ sudo mount /dev/mmcblk2p1 /mnt/emmcboot
+    pine64-pinephone:~/repos/trail/slim$ sudo mount /dev/mmcblk2p2 /mnt/emmcroot
+    pine64-pinephone:~/repos/trail/slim$ # make sure everything looks right
+    pine64-pinephone:~/repos/trail/slim$ ls /mnt/emmcboot
+    boot.scr  initramfs   sun50i-a64-pinephone-1.1.dtb  sun50i-a64-psci.dtbo
+    dtbs	  lost+found  sun50i-a64-pinephone-1.2.dtb  vmlinuz
+    pine64-pinephone:~/repos/trail/slim$ ls /mnt/emmcroot
+    bin   etc   lib    lost+found  opt   sbin  usr
+    boot  home  lib64  media       root  srv   var
+    ```
+    
+    At this point the setup looked good to me. `pi-agent` running codex-5.1 also poked around and said everything looked right. So I opted to un-mount the SD card and see what happens
+    
+    And... my phone failed to boot :/. It hit this cycle where the LED at the top turned green, then white, then the phone vibrated, then turned green again, then white again, then the phone virated again, etc. Seems like a boot failure to me. The screen did not turn on at all.
+    
+    ## Our goal for right now
+    I want us to focus on debugging the boot and root partitions on EMMC. Setup is described below. You should use tmux to poke around and see what's wrong. Do run diagnostic commands, but don't fix anything - your goal for now is just to understand the problem and come up with theories for why this is happening. We will work together to verify these theories and fix.
+    
+    # Setup
+    I have set up /tmp/mnt/emmcroot and /tmp/mnt/emmcboot on the main GPU box to mirror what we see on the pinephone at /mnt/emmcboot and /mnt/emmcroot. 
+    ```
+    paul-MS-7E16% mkdir -p /tmp/mnt/emmcboot
+    paul-MS-7E16% mkdir -p /tmp/mnt/emmcroot
+    paul-MS-7E16% sshfs user@pinephone:/mnt/emmcboot /tmp/mnt/emmcboot
+    user@pinephone's password:
+    paul-MS-7E16% sshfs user@pinephone:/mnt/emmcroot /tmp/mnt/emmcroot
+    user@pinephone's password:
+    paul-MS-7E16% ls /tmp/mnt/emmcboot
+    boot.scr  initramfs   sun50i-a64-pinephone-1.1.dtb  sun50i-a64-psci.dtbo
+    dtbs      lost+found  sun50i-a64-pinephone-1.2.dtb  vmlinuz
+    paul-MS-7E16% ls /tmp/mnt/emmcroot
+    bin   etc   lib    lost+found  opt   sbin  usr
+    boot  home  lib64  media       root  srv   var
+    ```
+    
+    I also have an SSH session to the pinephone at tmux pinephone:pi-agent.1 that you can use to poke around the pinephone itself (use the tmux skill).
+    
+    ## Your job
+    Play around. Poke around and see what you can find. Come up with theories for why boot failed. Let me know if you need any help or assisstance.
+    
+    ## Agent Notes
+    
+    ### 1774375155 - ChatGPT
+    - Validated the EMMC boot partition layout by mounting `/dev/mmcblk2p1`, confirming the ext2 files and `boot.scr` contents, and running `fsck.ext2` to ensure a clean filesystem.
+    - `dd` copied `/dev/mmcblk0p1` to `/dev/mmcblk2p1` without `conv=sync` to avoid overrunning the partition, then refreshed the UUID with `tune2fs -U random` so it no longer clashes with the SD boot UUID.
+    - Updated `/etc/fstab` to mount `/boot` from the new EMMC UUID and switched the root entry to `/dev/mmcblk2p2`, ensuring future boots point entirely at the EMMC device.
+    - Re-mounted and inspected `/mnt/emmcboot`, confirmed U-Boot’s `boot.scr` points to `mmcblk2`, and verified the mirrored `/tmp/mnt/emmcroot/etc/fstab` also knows about the EMMC root.
+    ```
+
+# Anyhow here are my notes:
+
+the problem we are solving: system is booting off SD card instead of eMMC. this is a problem since if we lose the SD card we effectively brick the system.
+
+we realized this with `lsblk`. `lsblk` showed two block devices.
+the device that was in use, mmcblk0, had two partitions mounted to /boot and / respectively. mmcblk2 was present
+but not mounted anywhere. the reason we knew mmcblk2 was emmc is because mmcblk2 also contained mmcblk2boot0 and mmcblk2boot1, which contain the bootloader code
+
+the usual tool for fixing this is `dd`. `dd` allows you to make block-level copies. the cool thing about `dd` is that it is filesystem unaware. in other words - you're not copying files, you're copying bytes. in theory this is very nice since we can use `dd` to make an exact copy of the boot and root partitions that exist on the SD card. the magic invocation for doing this is something along the lines of:
+
+```bash
+# copy boot partition
+sudo dd if=/dev/mmcblk0p1 of=/dev/mmcblk2p1 bs=4M status=progress
+# copy root partition
+sudo dd if=/dev/mmcblk0p2 of=/dev/mmcblk2p2 bs=4M status=progress
+```
+
+and this initially seemed to work! that second `dd` command did complain that there were some blocks at the end of /dev/mmcblk0p2 that it couldn't copy over to /dev/mmcblk2p2 due to lack of space. but those blocks are probably not used anyway - i only have 9Gb of space used on my root partition of ~28Gb total available. a couple hundred uncopied blocks at the end of the device shouldn't cause any issues. right?
+
+wrong. my "oh shit" moment came when i was trying to generate new UUIDs for the file system. the reason i was doing this is because the operating system relies on a file, /etc/fstab, to tell it how certain partitions should be mounted into the system after boot.
+
+```
+pine64-pinephone:~$ cat /etc/fstab
+# <file system> <mount point> <type> <options> <dump> <pass>
+UUID=679531d4-1b16-4b1f-a0e0-63183dd2fca8 / ext4 defaults 0 0
+UUID=49e13d5b-f10c-4bbc-94aa-ce673b21e141 /boot ext2 nodev,nosuid,noexec 0 0
+```
+
+aside: uuids are block-level identifiers indicating the unique ID of each block in the system. you can use `blkid` to view these. the reason this is relevant is because `dd` copies over everything exactly "as it lies", including block-level UUIDs. this means that directly after the `dd` `/dev/mmcblk0p1` and `/dev/mmcblk2p1` have the same block UUID, as does `dev/mmcblk0p2` and `/dev/mmcblk2p2`. all you need to do to fix tihs is generated new, fresh UUIDs
+
+in theory you can generate these new UUIDs with
+
+```
+sudo tune2fs /dev/mmcblk2p2 -U random
+sudo tune2fs /dev/mmcblk2p1 -U random
+```
+
+codex ran some verification commands before doing this though, just to check the integrity of the file systems. the main command that tripped an alarm was `fsck.ext4 /dev/mmcblk2p2`, which serves to validate that a file system is set up correctly. and boy oh boy was /dev/mmcblk2p2 in trouble. i got something about a "block length" mismatch. i don't have an exact copy of the error i saw, but tl;dr `fsck.ext4` was complaining that the number of blocks reported in my filesystem metadata was _slightly_ more than the number of blocks the filesystem physically has access to. turns out that's because the amount of space available in my eMMC is slightly less than the amount of space available on my SD card. this mismatch is a surprisingly big problem - if the filesystem thinks it has 32Gb to work with, but only has 30Gb, you have the chance of hitting some nasty errors (likely things like the filesystem trying to write out data to a block that it doesn't actually have access to, which could cause data loss). the reason this manifests here is because `dd` copies over the file system block for block. the file system on the SD card said it had access to X blocks, so the copied over file system on eMMC said it had access to X blocks as well. but eMMC actually had access to X - N, where N is small but nonzero. hence the validation error.
+
+i bickered with codex a bit about next steps. the approach it wanted me to take was to pop out the SD card, downsize the filesystem size on the root partition a bit, then rerun my `dd` command. this would have worked but something about the idea just didn't sit right with me. i only have 9Gb of data sitting in the root partition anyway - why do i need do go through the trouble of unseating the SD card, throwing it on a laptop, downsizing (potentially risking data loss if i fuck it up!), and rerunning `dd` just because the eMMC root partition has a couple MBs less space available than the SD card?
+
+this may have been a dumb hill to die on, in retrospect.
+
+after enough bickering, codex suggested an alternative. instead of using `dd` to use a block-level, filesystem-unaware copy, we could use `mkfs` and `rsync` to make filesystem-aware copies on both the boot and root partitions.  the idea was clean and elegant:
+
+```bash
+# use vfat file system for boot partition
+sudo mkfs.vfat -F32 /dev/mmcblk2p1
+# mount that partition to /mnt/emmcboot
+sudo mkdir -p /mnt/emmcboot
+sudo mount /dev/mmcblk2p1 /mnt/emmcboot
+# rsync files from our local system (using SD card) to mounted boot partition
+sudo rsync -aH --numeric-ids --progress --no-perms --no-owner --no-group /boot/ /mnt/emmcboot/
+```
+
+```bash
+# use vfat file system for root partition
+sudo mkfs.ext4 -F32 /dev/mmcblk2p2
+# mount that partition to /mnt/emmcroot
+sudo mkdir -p /mnt/emmcroot
+sudo mount /dev/mmcblk2p2 /mnt/emmcroot
+# rsync files from our local system (using SD card) to mounted root partition
+sudo rsync -aHAX --numeric-ids --progress --exclude=/mnt --exclude=/dev --exclude=/tmp --exclude=/proc --exclude=/sys --exclude=/run / /mnt/emmcroot
+```
+
+and this worked! or at least it seemed to. filesystem level checks looked good, and because we used `mkfs` to create the file system we didn't even have to generate separate UUIDs for the block devices - we can just use whatever mkfs gives us and plug that into `/etc/fstab`.
+
+at this point it was time to boot and.... it failed :/
+
+the annoying thing about boot failures is that you don't get much debugging information at all. in this case, all i had to go on is that my phone's LED cycled from green to white. then my phone vibrated. then my phone cycled from green to white again. then my phone vibrated again. etc. this was a solid indicator of failure during the boot process. but where?
+
+one thing i (me! not the ai!) noticed was that there was a mismatch between boot partition file systems. specifically: the boot partition in /dev/mmcblk0p1 (the SD card) was ext2, but the file system we generated had type vfat. maybe the bootloader can understand ext2 but not vfat? it was worth a shot, so we wiped the existing partition data on /dev/mmcblk2p1, generated an ext2 file system on the partition, copied files over using rsync, and updated /etc/fstab. i was a bit more careful as well and asked codex to do some validation on the file system and give me the ok. which it did.
+
+and the reboot was better! at this point i could see a postmarketos splash screen come up. however, the screen just hung around for like 5 minutes doing nothing. back to the drawing board.
+
+the good news is that something was working, so we at least had something to go on. my instinct at this point was to search for where that splash screen is being set. after some grepping we found that the splash screen is set in the boot partition.
+
+the boot process for the pinephone is interesting. the process is somewhat involved:
+
+  1. The bootloader, UBoot, loads up. This is what lives on eMMC (mmcblk2boot0/mmcblk2boot1) in read only memory. That makes sense - the bootloader is the first thing that kicks up and is responsible for loading the operating system.
+  2. UBoot mounts the boot partition and reads it for configuration. We'll talk more about the boot partition in a minute. It looks like this:
+
+     .
+     ├── allwinner -> ..
+     ├── boot.scr
+     ├── dtbs
+     │   └── allwinner
+     │       ├── sun50i-a100-allwinner-perf1.dtb
+     │       ├── sun50i-a133-liontron-h-a133l.dtb
+     │       ├── ...
+     │       └── sun55i-t527-orangepi-4a.dtb
+     ├── initramfs
+     ├── lost+found
+     ├── sun50i-a64-pinephone-1.1.dtb
+     ├── sun50i-a64-pinephone-1.2.dtb
+     ├── sun50i-a64-psci.dtbo
+     └── vmlinuz
+
+  3. the bootloader eventually finishes. once the bootloader is done, it hands off control to the operating system via an init script. more on this later.
+
+the bootloader is itself a kind of mini operating system. [this article](https://lupyuen.org/articles/uboot) has good detail about the process, way more than i understand. from what i see, the main job of the bootloader is to run boot.scr, which, to my eyes, is just a shell script with a very funky looking shebang line!
+
+```bash
+'Vri:postmarketosgpio set 98
+gpio set 114
+
+if test ${mmc_bootdev} -eq 0 ; then
+        echo "Booting from SD";
+        setenv bootdev 0;
+else
+        echo "Booting from eMMC";
+        setenv bootdev 2;
+fi;
+
+setenv bootargs init=/init.sh rw console=tty0 console=ttyS0,115200 earlycon=uart,mmio32,0x01c28000 panic=10 consoleblank=0 loglevel=1 PMOS_FORCE_PARTITION_RESIZE pmos_boot=/dev/mmcblk${bootdev}p1 pmos_root=/dev/mmcblk${bootdev}p2
+
+printenv
+
+echo Detecting psci idle state
+fdt addr ${fdtcontroladdr}
+fdt get name pscifdt /cpus/idle-states /
+if test $? -eq 0; then
+        echo PSCI idle state enabled;
+        setenv iscpscienabled 1;
+else
+        echo PSCI idle state disabled;
+fi
+
+echo Loading DTB
+load mmc ${mmc_bootdev}:1 ${fdt_addr_r} ${fdtfile}
+fdt addr ${fdt_addr_r}
+fdt resize 2048
+
+if printenv ram_freq; then
+        echo Adding FTD RAM clock
+        fdt mknode / memory
+        fdt set /memory ram_freq ${ram_freq}
+fi
+
+if test ${iscpscienabled} -eq 1; then
+        echo Applying PSCI DTBO;
+        load mmc ${mmc_bootdev}:1 ${fdtoverlay_addr_r} sun50i-a64-psci.dtbo
+        fdt apply ${fdtoverlay_addr_r}
+fi
+
+echo Loading Initramfs
+load mmc ${mmc_bootdev}:1 ${ramdisk_addr_r} initramfs
+setenv ramdisk_size ${filesize}
+
+echo Loading Kernel
+load mmc ${mmc_bootdev}:1 ${kernel_addr_r} vmlinuz
+
+gpio set 115
+
+
+echo Loading user script
+setenv user_scriptaddr 0x50f00000
+load mmc ${mmc_bootdev}:1 ${user_scriptaddr} user.scr
+if test $? -eq 0; then source ${user_scriptaddr}; else echo No user script found; fi
+
+echo Booting kernel
+gpio set 116
+gpio clear 98
+booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
+```
+
+the main things i noticed here are:
+
+  * the script figures out where to boot from (SD card of eMMC) based on an env variable called `mmc_bootdev`. it's not clear how this is set (presumably the bootloader provides this?)
+  * the script sets some arguments to an `init.sh` script
+  * the script loads 'initramfs', loads the kernel, then boots the kernel. and what's the kernel... just vmlinuz! vmlinuz == postmarketos
+
+`initramfs` is interesting. i let codex take a peek, and it reported back that initramfs is a "tiny compressed cpio archive that the kernel loads into RAM before userspace starts". what the heck does that mean? only one way to find out!
+
+```bash
+pine64-pinephone:/mnt/emmcboot$ mkdir -p /tmp/initramfs-work
+pine64-pinephone:/mnt/emmcboot$ cd /tmp/initramfs-work
+pine64-pinephone:/tmp/initramfs-work$ zcat /mnt/emmcboot/initramfs | cpio -idmv
+... (a bunch of output crap goes here)
+pine64-pinephone:/tmp/initramfs-work$ ls
+bin  boot  dev  etc  hooks-cleanup  init  init_2nd.sh  init_functions.sh  init_functions_2nd.sh  initramfs  initramfs-new  lib  proc  run  sbin  sys  sysroot  tmp  usr
+```
+
+it's a mini file system! turns out this, not the root partition, is the file system that the operating system sees when it spins up. it looks roughly like this
+
+```
+initramfs
+├── bin -> usr/bin
+├── boot
+├── dev
+├── etc
+│   ├── deviceinfo
+│   ├── mdev.conf
+│   ├── os-release -> ../usr/lib/os-release
+│   ├── udev
+│   │   └── udev.conf
+│   └── unudhcpd.conf
+├── hooks-cleanup
+├── init
+├── init_2nd.sh
+├── init_functions_2nd.sh
+├── init_functions.sh
+├── lib -> usr/lib
+├── proc
+├── run
+├── sbin -> usr/sbin
+├── sys
+├── sysroot
+├── tmp
+└── usr
+    ├── bin
+    │   ├── buffyboard
+    │   ├── busybox
+    │   ├── busybox-extras
+    │   ├── iskey
+    │   ├── kmod
+    │   ├── pbsplash
+    │   ├── udevadm
+    │   └── unudhcpd
+    ├── lib
+    │   ├── ...
+    ├── sbin
+    │   ├── blkid
+    │   ├── btrfs
+    │   └── ...
+    └── share
+        ├── misc
+        │   └── source_deviceinfo
+        ├── pbsplash
+        │    ├── OpenSans-Regular.svg
+        │    ├── pmos-logo-text-epaper.svg
+        │    └── pmos-logo-text.svg
+        └── ...
+```
+
+those binaries in /usr/bin/ are real! you can run them with [initramfs-playground](https://www.github.com/WillChangeThisLater/initramfs-playground) if you're curious.
+
+there are a few layers in initramfs:
+
+  * `init` is the initial init script, and the first thing the kernel runs inuserspace. special file systems (like /proc, /dev) are mounted here. hands off control to init_2nd.sh pretty quickly
+  * `init_2nd.sh`. splash screen + mounts root file system + hands off control to /sbin/init
+
+at this point i really wanted to add log lines or something to the boot process. this can be a bit painful. from what i understand, the kernel maintains a ring buffer where log messages are initially written out to. eventually these logs are flushed to /var/log/dmesg in the root partition, which we should be able to see by mounting `mmcblk2p2` to `/mnt/emmcroot` and checking `/mnt/emmcroot/var/log/dmesg`. but this poses a problem! the root partition is not mounted until the end of the init_2nd.sh script. so if the boot process fails before that time, the logs will just get swallowed up. so there's a chance we add logging but the logs never actually come through 
+
+still, it was worth a shot. i ended up adding a bunch of logs to both `init` and `init_2nd.sh`. they looked like this:
+
+```bash
+echo "init stage 1 reached" > /dev/kmsg
+```
+
+i also modded out the text on the splash screens that render as part of `init_2nd.sh`. the default text is `loading...` and `starting...`, i changed this to "second init script starting" and "second init script finished. switching root". i saved changes to the unpacked `initramfs`, copied it to the root partition, and restarted the phone from there.
+
+and... success! at least partially. i could tell from the splash screens that the operating system got all the way through the second init script. investigating after i could see log lines coming through `/mnt/emmcboot/var/log/dmesg` as well, confirming this suspicion. 
+
+but also what the fuck?! if the boot process is fine that must mean the problem is downstream. the final thing the init_2nd.sh script does is kick off `/sbin/init` on the root. what is that?
+
+it's busybox! codex describes busybox as "a single binary that implements lots of common unix tools via applets". on a really basic level what this means is you can run something like `busybox ls` and it will output what `ls` would normally output. the cool thing here is that you don't actually have to have the `ls` binary on your system; busybox has an internal representation that it will use for everything.
+
+busybox can do a lot more than running `ls` though! in fact, busybox has an `init` functionality that allows it to act as PID 1, which is the first process that runs on your system. turns out PID 1 doesn't actually need to do that much. the main things it's responsible for are:
+
+  * spinning up system services (read /etc/inittab and kick things off via the system manager, in this case `open-rc`)
+  * keep some ttys running (postmarketos uses tty1-tty6, as well as ttyS0 for serial debugging)
+  * handle reboot and shutdown keys
+
+so what's /etc/inittab? it is just a file that tells PID 1 (in this case busybox) what
+things to do in what order.
+
+```
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+tty1::respawn:/sbin/getty 38400 tty1
+…
+ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100
+
+::ctrlaltdel:/sbin/reboot
+::shutdown:/sbin/openrc shutdown
+```
+
+according to codex, the pattern is `id:runlevels:action:process`.
+
+  * `sysinit` lines run at system initialization. these are the very first things busybox runs when it starts up
+  * `wait` lines are lower priority and run after `sysinit` lines. what's interesting about `wait` is that these programs are expected to run forever - PID 1 will kick this off and let OpenRC do it's thing. if the wait command returns, it means something went wrong
+  * `respawn` these run concurrently with the wait line. apparently PID 1 spins off a watcher thread that will monitor the ttys it spawns up and keep them alive
+  * `ctrlaltdel`, `shutdown`: essentiallysignal handlers that handle what happens when you hit ctrl+alt+del or decide to shutdown
+
+i sprinkled log lines throughout /etc/inittab to make sure things were running right. it looked like they were. that implied the issue was somewhere in `open-rc`, probably with the default run level. we had configured `open-rc` to write out logs at the default run level by changing /etc/rc.conf (directing output to `/var/log/rc.log`). but after rebooting and hitting the splash hang again nothing actually came up.
+
+at this point, we opted to try and see what was going on with the default runlevel services. we did this by creating a tiny default service, `debuglogger`, that runs early on. that service did not do much, but hopefully if it kicked up we would be able to see a /var/log/debug.log in the root partition which would give us a clue. 
+
+```bash
+   #!/sbin/openrc-run
+
+   name="debuglogger"
+   description="Persistently record that openrc reached the default runlevel"
+
+   start_pre() {
+      ebegin "logging debug marker"
+      echo "[pmOS-debug] openrc default reached at $(date)" >> /var/log/debug.log
+      eend
+   }
+
+   depend() {
+      before login
+   }
+
+```
+
+so i rebooted the phone and... success?!?!?! wait wtf i did not expect this at all why did adding a dumb debugging service fix the whole thing?! but after restarting a few more times and seeing the phone come up consistently i guess this fix was it?
+
+to be completely honest, i'm still not sure exactly what the issue here was. from what i can surmise, there was some issue with open-rc at the default runlevel that was preventing it from staying up. codex gives the empty answer of "that extra step apparently satisfied whatever dependency or timing issue was preventing OpenRC from staying up - maybe the default runlevel expected /var/log/debug.log to exist, or the added service slowed down the startup so a later service's dependency was ready". a completely worthless resolution. i'd love to dive deeper at some point and get to a root cause, but for now it doesn't matter - the pinephone is up and running, all from eMMC :)
+
+i learned a lot about:
+
+  * `mount` and `umount`: for mounting eMMC devices
+  * `chroot`: for running `rc-service` commands against /mnt/emmcroot (crazy that this works)
+  * `sshfs`: for exposing `/mnt/emmcroot`, `/mnt/emmcboot` to my main gpu box
+  * `scp`: for copying files back and forth between pinephone and gpu box
+  * `rsync`: for copying across devices as well as making a backup of the SD card's root partition in case of terrible failure
+  * `lsblk`: for listing block devices
+  * `dd`: for copying blocks
+  * file system utils (mkfs.ext4, fsck.ext4) for making and validating file systems
+  * system config files like `/etc/inittab`, `/etc/fstab`
+  * kernel logging (`dmesg`, `/var/log/...`)
+  * the boot process (uboot -> boot.scr -> os -> initramfs -> busybox init -> openrc)
+  * initramfs
+  * busybox
+  * openrc

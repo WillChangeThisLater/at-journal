@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro: Pinephone EMMC Setup - Paul's Appalachian Trail Journal</title>
+    <style>
+        body {
+            font-family: monospace;
+            line-height: 1.6;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+            overflow-x: hidden;
+        }
+        h1 { font-size: 1.5em; border-bottom: 2px solid #333; }
+        h2 { font-size: 1.2em; border-bottom: 1px solid #ccc; margin-top: 2em; }
+        h3 { font-size: 1.1em; margin-top: 1.5em; }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: scroll;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 15px 0;
+            max-width: 100%;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .code-block {
+            border: 1px solid #ccc;
+            margin: 15px 0;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .sidebar {
+            background: #e9ecef;
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        a { color: #0066cc; }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ccc;
+            font-size: 0.9em;
+            color: #666;
+        }
+        ul { margin: 10px 0; }
+        li { margin: 5px 0; }
+        p { margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Paul's Appalachian Trail Journal</h1>
+    </header>
+    
+    <main>
+        <article class="blog-post">
+            <h3>
+                <span class="post-date">[2026-03-26]</span> 
+                <span class="post-mile">Retro: Pinephone EMMC Setup</span>
+            </h3>
+            <h1>Retro: Pinephone EMMC Setup</h1>
+            
+            <p>hello friends!</p>
+            
+            <p>i'm writing about a curious rabbit hole i fell down preparing my pinephone for the rigors of the appalachain trail.</p>
+            
+            <p>i'm doing this selfishly and mostly so the stuff i learned sticks in my head.</p>
+            
+            <p>the most interesting thing is my AI setup, which has been useful for debugging some relativley low level issues on the pinephone. i'll discuss that first.</p>
+            
+            <p>i'll also attempt to give a deep dive into the issue and what pi-agent and i debugged and fixed.</p>
+            
+            <p>that means a lot of technical mumbo jumbo which is probably not going to be engaging for those of you who are less interested in operating and file systems. if that's not your jam no worries! just read the first part and stop when you see the notes section.</p>
+            
+            <div class="sidebar">
+                <h2>AI Dev Setup</h2>
+                <ul>
+                    <li>gpt-5.1-codex-mini (thinking off - the horror!)</li>
+                    <li>pi-agent</li>
+                    <li>tmux</li>
+                </ul>
+            </div>
+            
+            <p>tmux is a terminal multiplexer. i love tmux and use it with everything, including pi-agent. i have a tmux skill that helps pi-agent interact with a tmux pane. i can say something like:</p>
+            
+            <pre>
+"run commands against my pinephone. you can use this pane: pinephone.pi-agent:1. pinephone.pi-agent:1 is SSH'd into the pinephone"
+            </pre>
+            
+            <p>and it'll run commands directly on the pinephone over the SSH connection. that's nifty since it lets the agent poke around the pinephone directly.</p>
+            
+            <p>i did all my work in a tmux session called `pinephone` with a window called `pi-agent`. my setup was simple: just two panes. the top pane is running `pi-agent`, the bottom is ssh'd into the pinephone.</p>
+            
+            <p>that's it! sometimes the agent does need help though (e.g. if it needs to run a command with 'sudo'), and it's instructed to ask for it. though sometimes i will get lazy and give the agent the sudo password (147147, the system default).</p>
+            
+            <p>gpt-5.1-codex-mini with thinking off is... not the brightest. i've tricked myself into thinking this is a good thing. the frontier models now are so strong they often get to my answer immediately and effortlessly. this usually requires little to no thinking on my part. helpful when i just need something done, but less helpful when i want to actually learn something. gpt-5.1-codex-mini isn't always right and screws up frequently, which is a feature since it means i have to think carefully when i'm interacting with it.</p>
+            
+            <p>to be honest i don't think i would have taken this much of a deep dive without an llm at my side. it's an incredible scout if you ask it good questions. i would never have done something like open up an initramfs file by myself, it would have been too foreign territory. this really excites me - i feel much more confident doing low level programming, an electronics project, etc. with an llm at my side.</p>
+            
+            <p>one broader takeaway for myself: i am starting to prefer real and tangible projects above all else. projects where you have real imperative proof that the thing works or it doesn't. llms are good for this since they can't dunning kruger you - you can see visually when a phone gose from failed boot to "starting".</p>
+            
+            <div class="note">
+                <strong>system prompt i used for debugging agent</strong>
+            </div>
+            
+            <pre style="height: 50vh; overflow-y: auto; max-height: 500px;">
+# Goal
+I am modding out a pinephone. I will use this pinephone as my main programming device for a long hike.
+
+I recently realized that the phone was running 100% off my SD card. The phone has 32Gb of EMMC but is not using any of it
+
+Here's the output of 'df'. You can see that there is one device, mmcblk0p2, mounted at root.
+
+df -h /
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/mmcblk0p2   29G  9.7G   18G  36% /
+
+And here's the output of lsblk. You can see there are two ~32Gb devices: mmcblk0 (the SD card) and mmcblk2 (the EMMC). The reason I think mmcblk2 is EMMC is because it has a few 'hardcoded' boot partitions (mmcblk2boot0, mmcblk2boot1) that would not exist on the SD card.
+
+lsblk
+NAME         MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+mmcblk0      179:0    0 29.1G  0 disk
+├─mmcblk0p1  179:1    0  243M  0 part /boot
+└─mmcblk0p2  179:2    0 28.9G  0 part /
+mmcblk2      179:32   0 28.9G  0 disk
+├─mmcblk2p1  179:33   0  243M  0 part /mnt/emmcboot
+└─mmcblk2p2  179:34   0 28.7G  0 part /mnt/emmcroot
+mmcblk2boot0 179:64   0    4M  1 disk
+mmcblk2boot1 179:96   0    4M  1 disk
+zram0        253:0    0 512M  0 disk [SWAP]
+zram1        253:1    0    2G  0 disk
+
+At first, I tried to copy the files from mmcblk0p1 -> mmcblk2p1 and mmcblk0p2 -> mmcblk2p2 directly using dd. That looked something like:
+
+sudo dd if=/dev/mmcblk0 or=/dev/mmcblk2 bs=4M status=progress conv=sync,noerror
+
+However, when I tried to validate the EMMC partitions I hit an error! The problem is that the SD card's root partition is slightly larger than EMMC. When we use dd to copy the file system literally it copies the number of blocks the file system supports. This causes an error since the number of blocks that can be supported on the EMMC is slightly less than what can be supported on the SD card.
+
+The option Claude gave me at this point was to downsize the file system on the SD card. This bugged me for a couple reasons though:
+  * It's cumbersome: I don't want to have to downsize the SD card root partition, dd copy, then upsize again.
+  * It's annoying. I can't downsize the partition live on my pinphone. Instead, I have to take the SD card out of the phone, load it into a machine that has an SD reader, then presumably resize with something like GParted.
+  * ^ because of these it also seems a bit risky. what if I screw up? I do not want to lose progress
+
+I told Claude this, and it gave me an alternative solution. Instead of using dd to do a block-level copy, we can (a) add file systems to the EMMC partitions directly using mkfs, (b) mount those file systems at /mnt/emmcboot, /mnt/emmcroot, and (c) use rsync to copy files over. The whole setup looks roughly like this:
+
+## Set up the boot partition
+sudo mkfs.vfat -F32 /dev/mmcblk2p1
+sudo mkdir -p /mnt/emmcboot
+sudo mount /dev/mmcblk2p1 /mnt/emmcboot
+sudo rsync -aH --numeric-ids --progress --no-perms --no-owner --no-group /boot/ /mnt/emmcboot/
+
+## Set up the root partition
+sudo mkfs.ext4 -F32 /dev/mmcblk2p2
+sudo mkdir -p /mnt/emmcroot
+sudo mount /dev/mmcblk2p2 /mnt/emmcroot
+sudo rsync -aHAX --numeric-ids --progress --exclude=/mnt --exclude=/dev --exclude=/tmp --exclude=/proc --exclude=/sys --exclude=/run / /mnt/emmcroot
+
+## Verification
+sudo umount /mnt/emmcroot
+sudo umount /mnt/emmcboot
+sudo fsck.ext4 /dev/mmcblk2p2
+e2fsck 1.47.3 (8-Jul-2025)
+/dev/mmcblk2p2: clean, 184054/1880480 files, 2692856/7515136 blocks
+
+sudo fsck.vfat /dev/mmcblk2p1
+fsck.fat 4.2 (2021-01-31)
+There are differences between boot sector and its backup.
+This is mostly harmless. Differences: (offset:original/backup)
+  65:01/00
+
+pine64-pinephone:~/repos/trail/slim$ # mount the partitions
+sudo mount /dev/mmcblk2p1 /mnt/emmcboot
+sudo mount /dev/mmcblk2p2 /mnt/emmcroot
+sudo ls /mnt/emmcboot
+boot.scr  initramfs   sun50i-a64-pinephone-1.1.dtb  sun50i-a64-psci.dtbo
+dtbs      lost+found  sun50i-a64-pinephone-1.2.dtb  vmlinuz
+sudo ls /mnt/emmcroot
+bin   etc   lib    lost+found  opt   sbin  usr
+boot  home  lib64  media       root  srv   var
+            </pre>
+            
+            <h2>The Problem</h2>
+            
+            <p>the problem we are solving: system is booting off SD card instead of eMMC. this is a problem since if we lose the SD card we effectively brick the system.</p>
+            
+            <p>we realized this with lsblk. lsblk showed two block devices. the device that was in use, mmcblk0, had two partitions mounted to /boot and / respectively. mmcblk2 was present but not mounted anywhere. the reason we knew mmcblk2 was emmc is because mmcblk2 also contained mmcblk2boot0 and mmcblk2boot1, which contain the bootloader code.</p>
+            
+            <h2>The dd Approach</h2>
+            
+            <p>the usual tool for fixing this is dd. dd allows you to make block-level copies. the cool thing about dd is that it is filesystem unaware. in other words - you're not copying files, you're copying bytes. in theory this is very nice since we can use dd to make an exact copy of the boot and root partitions that exist on the SD card. the magic invocation for doing this is something along the lines of:</p>
+            
+            <pre>
+# copy boot partition
+sudo dd if=/dev/mmcblk0p1 of=/dev/mmcblk2p1 bs=4M status=progress
+# copy root partition
+sudo dd if=/dev/mmcblk0p2 of=/dev/mmcblk2p2 bs=4M status=progress
+            </pre>
+            
+            <p>and this initially seemed to work! that second dd command did complain that there were some blocks at the end of /dev/mmcblk0p2 that it couldn't copy over to /dev/mmcblk2p2 due to lack of space. but those blocks are probably not used anyway - i only have 9Gb of space used on my root partition of ~28Gb total available. a couple hundred uncopied blocks at the end of the device shouldn't cause any issues. right?</p>
+            
+            <p>wrong. my "oh shit" moment came when i was trying to generate new UUIDs for the file system. the reason i was doing this is because the operating system relies on a file, /etc/fstab, to tell it how certain partitions should be mounted into the system after boot.</p>
+            
+            <pre>
+cat /etc/fstab
+# file system mount point type options dump pass
+UUID=679531d4-1b16-4b1f-a0e0-63183dd2fca8 / ext4 defaults 0 0
+UUID=49e13d5b-f10c-4bbc-94aa-ce673b21e141 /boot ext2 nodev,nosuid,noexec 0 0
+            </pre>
+            
+            <p>aside: uuids are block-level identifiers indicating the unique ID of each block in the system. you can use blkid to view these. the reason this is relevant is because dd copies over everything exactly as it lies, including block-level UUIDs. this means that directly after the dd /dev/mmcblk0p1 and /dev/mmcblk2p1 have the same block UUID, as does dev/mmcblk0p2 and /dev/mmcblk2p2. all you need to do to fix tihs is generated new, fresh UUIDs</p>
+            
+            <p>in theory you can generate these new UUIDs with</p>
+            
+            <pre>
+sudo tune2fs /dev/mmcblk2p2 -U random
+sudo tune2fs /dev/mmcblk2p1 -U random
+            </pre>
+            
+            <p>codex ran some verification commands before doing this though, just to check the integrity of the file systems. the main command that tripped an alarm was fsck.ext4 /dev/mmcblk2p2, which serves to validate that a file system is set up correctly. and boy oh boy was /dev/mmcblk2p2 in trouble. i got something about a "block length" mismatch. i don't have an exact copy of the error i saw, but tl;dr fsck.ext4 was complaining that the number of blocks reported in my filesystem metadata was slightly more than the number of blocks the filesystem physically has access to. turns out that's because the amount of space available in my eMMC is slightly less than the amount of space available on my SD card. this mismatch is a surprisingly big problem - if the filesystem thinks it has 32Gb to work with, but only has 30Gb, you have the chance of hitting some nasty errors (likely things like the filesystem trying to write out data to a block that it doesn't actually have access to, which could cause data loss). the reason this manifests here is because dd copies over the file system block for block. the file system on the SD card said it had access to X blocks, so the copied over file system on eMMC said it had access to X blocks as well. but eMMC actually had access to X - N, where N is small but nonzero. hence the validation error.</p>
+            
+            <p>i bickered with codex a bit about next steps. the approach it wanted me to take was to pop out the SD card, downsize the filesystem size on the root partition a bit, then rerun my dd command. this would have worked but something about the idea just didn't sit right with me. i only have 9Gb of data sitting in the root partition anyway - why do i need do go through the trouble of unseating the SD card, throwing it on a laptop, downsizing (potentially risking data loss if i fuck it up!), and rerunning dd just because the eMMC root partition has a couple MBs less space available than the SD card?</p>
+            
+            <p>this may have been a dumb hill to die on, in retrospect.</p>
+            
+            <h2>The mkfs + rsync Solution</h2>
+            
+            <p>after enough bickering, codex suggested an alternative. instead of using dd to use a block-level, filesystem-unaware copy, we could use mkfs and rsync to make filesystem-aware copies on both the boot and root partitions. the idea was clean and elegant:</p>
+            
+            <pre>
+# use vfat file system for boot partition
+sudo mkfs.vfat -F32 /dev/mmcblk2p1
+sudo mkdir -p /mnt/emmcboot
+sudo mount /dev/mmcblk2p1 /mnt/emmcboot
+sudo rsync -aH --numeric-ids --progress --no-perms --no-owner --no-group /boot/ /mnt/emmcboot/
+
+# use vfat file system for root partition
+sudo mkfs.ext4 -F32 /dev/mmcblk2p2
+sudo mkdir -p /mnt/emmcroot
+sudo mount /dev/mmcblk2p2 /mnt/emmcroot
+sudo rsync -aHAX --numeric-ids --progress --exclude=/mnt --exclude=/dev --exclude=/tmp --exclude=/proc --exclude=/sys --exclude=/run / /mnt/emmcroot
+            </pre>
+            
+            <p>and this worked! or at least it seemed to. filesystem level checks looked good, and because we used mkfs to create the file system we didn't even have to generate separate UUIDs for the block devices - we can just use whatever mkfs gives us and plug that into /etc/fstab.</p>
+            
+            <h2>The Boot Failure</h2>
+            
+            <p>at this point it was time to boot and.... it failed :/</p>
+            
+            <p>the annoying thing about boot failures is that you don't get much debugging information at all. in this case, all i had to go on is that my phone's LED cycled from green to white. then my phone vibrated. then my phone cycled from green to white again. then my phone vibrated again. etc. this was a solid indicator of failure during the boot process. but where?</p>
+            
+            <div class="note">
+                <strong>Boot Process Overview:</strong>
+                <ul>
+                    <li>UBoot bootloader loads (from eMMC read-only)</li>
+                    <li>UBoot mounts boot partition and reads configuration</li>
+                    <li>Bootloader finishes and hands off to OS via init script</li>
+                    <li>boot.scr is a shell script with funky shebang</li>
+                    <li>Loads initramfs, kernel (vmlinuz), then boots kernel</li>
+                </ul>
+            </div>
+            
+            <p>the bootloader is itself a kind of mini operating system. from what i see, the main job of the bootloader is to run boot.scr, which, to my eyes, is just a shell script with a very funky looking shebang line!</p>
+            
+            <pre>
+'Vri:postmarketos
+gpio set 98
+gpio set 114
+
+if test ${mmc_bootdev} -eq 0 ; then
+        echo "Booting from SD";
+        setenv bootdev 0;
+else
+        echo "Booting from eMMC";
+        setenv bootdev 2;
+fi
+            </pre>
+            
+            <h2>initramfs Deep Dive</h2>
+            
+            <p>initramfs is interesting. it's a tiny compressed cpio archive that the kernel loads into RAM before userspace starts. turns out this, not the root partition, is the file system that the operating system sees when it spins up. it looks roughly like this</p>
+            
+            <pre>
+initramfs
+├── bin -> usr/bin
+├── boot
+├── dev
+├── etc
+│   ├── deviceinfo
+│   ├── mdev.conf
+│   ├── os-release -> ../usr/lib/os-release
+│   └── udev
+│       └── udev.conf
+├── hooks-cleanup
+├── init
+├── init_2nd.sh
+├── init_functions_2nd.sh
+├── init_functions.sh
+├── lib -> usr/lib
+├── proc
+├── run
+├── sbin -> usr/sbin
+├── sys
+├── sysroot
+├── tmp
+└── usr
+            </pre>
+            
+            <p>those binaries in /usr/bin/ are real! you can run them with <a href="https://github.com/WillChangeThisLater/initramfs-playground">initramfs-playground</a> if you're curious.</p>
+            
+            <h2>Splash Screen Debugging</h2>
+            
+            <p>there are a few layers in initramfs:</p>
+            
+            <ul>
+                <li>init is the initial init script, and the first thing the kernel runs in userspace. special file systems (like /proc, /dev) are mounted here. hands off control to init_2nd.sh pretty quickly</li>
+                <li>init_2nd.sh. splash screen + mounts root file system + hands off control to /sbin/init</li>
+            </ul>
+            
+            <p>at this point i really wanted to add log lines or something to the boot process. this can be a bit painful. from what i understand, the kernel maintains a ring buffer where log messages are initially written out to. eventually these logs are flushed to /var/log/dmesg in the root partition, which we should be able to see by mounting mmcblk2p2 to /mnt/emmcroot and checking /mnt/emmcroot/var/log/dmesg. but this poses a problem! the root partition is not mounted until the end of the init_2nd.sh script. so if the boot process fails before that time, the logs will just get swallowed up. so there's a chance we add logging but the logs never actually come through</p>
+            
+            <p>still, it was worth a shot. i ended up adding a bunch of logs to both init and init_2nd.sh. they looked like this:</p>
+            
+            <pre>
+echo "init stage 1 reached" > /dev/kmsg
+            </pre>
+            
+            <p>i also modded out the text on the splash screens that render as part of init_2nd.sh. the default text is loading... and starting..., i changed this to "second init script starting" and "second init script finished. switching root". i saved changes to the unpacked initramfs, copied it to the root partition, and restarted the phone from there.</p>
+            
+            <p>and... success! at least partially. i could tell from the splash screens that the operating system got all the way through the second init script. investigating after i could see log lines coming through /mnt/emmcboot/var/log/dmesg as well, confirming this suspicion.</p>
+            
+            <h2>Busybox and OpenRC</h2>
+            
+            <p>but also what the fuck?! if the boot process is fine that must mean the problem is downstream. the final thing the init_2nd.sh script does is kick off /sbin/init on the root. what is that?</p>
+            
+            <p>it's busybox! busybox is a single binary that implements lots of common unix tools via applets. on a really basic level what this means is you can run something like busybox ls and it will output what ls would normally output. the cool thing here is that you don't actually have to have the ls binary on your system; busybox has an internal representation that it will use for everything.</p>
+            
+            <p>busybox can do a lot more than running ls though! in fact, busybox has an init functionality that allows it to act as PID 1, which is the first process that runs on your system. turns out PID 1 doesn't actually need to do that much. the main things it's responsible for are:</p>
+            
+            <ul>
+                <li>spinning up system services (read /etc/inittab and kick things off via the system manager, in this case open-rc)</li>
+                <li>keep some ttys running (postmarketos uses tty1-tty6, as well as ttyS0 for serial debugging)</li>
+                <li>handle reboot and shutdown keys</li>
+            </ul>
+            
+            <p>/etc/inittab is just a file that tells PID 1 (in this case busybox) what things to do in what order.</p>
+            
+            <pre>
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+tty1::respawn:/sbin/getty 38400 tty1
+ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100
+
+::ctrlaltdel:/sbin/reboot
+::shutdown:/sbin/openrc shutdown
+            </pre>
+            
+            <p>according to codex, the pattern is id:runlevels:action:process.</p>
+            
+            <ul>
+                <li>sysinit lines run at system initialization. these are the very first things busybox runs when it starts up</li>
+                <li>wait lines are lower priority and run after sysinit lines. what's interesting about wait is that these programs are expected to run forever - PID 1 will kick this off and let OpenRC do it's thing. if the wait command returns, it means something went wrong</li>
+                <li>respawn these run concurrently with the wait line. apparently PID 1 spins off a watcher thread that will monitor the ttys it spawns up and keep them alive</li>
+                <li>ctrlaltdel, shutdown: essentially signal handlers that handle what happens when you hit ctrl+alt+del or decide to shutdown</li>
+            </ul>
+            
+            <p>i sprinkled log lines throughout /etc/inittab to make sure things were running right. it looked like they were. that implied the issue was somewhere in open-rc, probably with the default run level. we had configured open-rc to write out logs at the default run level by changing /etc/rc.conf (directing output to /var/log/rc.log). but after rebooting and hitting the splash hang again nothing actually came up.</p>
+            
+            <p>at this point, we opted to try and see what was going on with the default runlevel services. we did this by creating a tiny default service, debuglogger, that runs early on. that service did not do much, but hopefully if it kicked up we would be able to see a /var/log/debug.log in the root partition which would give us a clue.</p>
+            
+            <pre>
+#!/sbin/openrc-run
+
+name="debuglogger"
+description="Persistently record that openrc reached the default runlevel"
+
+start_pre() {
+   ebegin "logging debug marker"
+   echo "[pmOS-debug] openrc default reached at $(date)" >> /var/log/debug.log
+   eend
+}
+
+depend() {
+   before login
+}
+            </pre>
+            
+            <p>so i rebooted the phone and... success?!?!?! wait wtf i did not expect this at all why did adding a dumb debugging service fix the whole thing?! but after restarting a few more times and seeing the phone come up consistently i guess this fix was it?</p>
+            
+            <div class="note">
+                <strong>TL;DR on the fix:</strong> Adding the debuglogger service apparently satisfied whatever dependency or timing issue was preventing OpenRC from staying up at the default runlevel. The exact reason is still unclear.
+            </div>
+            
+            <p>to be completely honest, i'm still not sure exactly what the issue here was. from what i can surmise, there was some issue with open-rc at the default runlevel that was preventing it from staying up. codex gives the empty answer of "that extra step apparently satisfied whatever dependency or timing issue was preventing OpenRC from staying up - maybe the default runlevel expected /var/log/debug.log to exist, or the added service slowed down the startup so a later service's dependency was ready". a completely worthless resolution. i'd love to dive deeper at some point and get to a root cause, but for now it doesn't matter - the pinephone is up and running, all from eMMC :)</p>
+            
+            <h2>What I Learned</h2>
+            
+            <p>i learned a lot about:</p>
+            
+            <ul>
+                <li>mount and umount: for mounting eMMC devices</li>
+                <li>chroot: for running rc-service commands against /mnt/emmcroot (crazy that this works)</li>
+                <li>sshfs: for exposing /mnt/emmcroot, /mnt/emmcboot to my main gpu box</li>
+                <li>scp: for copying files back and forth between pinephone and gpu box</li>
+                <li>rsync: for copying across devices as well as making a backup of the SD card's root partition in case of terrible failure</li>
+                <li>lsblk: for listing block devices</li>
+                <li>dd: for copying blocks</li>
+                <li>file system utils (mkfs.ext4, fsck.ext4) for making and validating file systems</li>
+                <li>system config files like /etc/inittab, /etc/fstab</li>
+                <li>kernel logging (dmesg, /var/log/...)</li>
+                <li>the boot process (uboot -> boot.scr -> os -> initramfs -> busybox init -> openrc)</li>
+                <li>initramfs</li>
+                <li>busybox</li>
+                <li>openrc</li>
+            </ul>
+            
+            <p class="footer">
+                <a href="../index.html">← Back to Index</a> |
+                <a href="../about-me.html">About Me</a>
+            </p>
+            
+            <div class="session-log">
+                <h2>AI Agent Session Log</h2>
+                <p>The following is a transcript of the pi-agent session that helped debug the EMMC setup. You can review the actual commands and responses here:</p>
+                <div id="session-log-container"></div>
+            </div>
+        </article>
+    </main>
+    
+    <script>
+        // Session log data embedded from session-log-data.json
+        const sessionData = {
+            "role": "assistant",
+            "timestamp": "2026-03-24T17:34:15.403Z",
+            "content": ""
+        };
+        
+        // Render session log
+        function renderSessionLog() {
+            const container = document.getElementById('session-log-container');
+            if (!container) return;
+            
+            fetch('session-log-data.json')
+                .then(res => res.json())
+                .then(data => {
+                    // Add session header
+                    const header = document.createElement('div');
+                    header.style.cssText = 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;';
+                    header.innerHTML = `
+                        <h2 style="margin: 0 0 10px 0;">AI Agent Session Log</h2>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.3);">
+                            <div>
+                                <div style="font-size: 0.75em; opacity: 0.8; text-transform: uppercase; margin-bottom: 5px;">Session ID</div>
+                                <div style="font-family: monospace; font-size: 0.85em;">${data[0].timestamp.substring(0, 20)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75em; opacity: 0.8; text-transform: uppercase; margin-bottom: 5px;">Started</div>
+                                <div style="font-size: 0.9em;">${new Date(data[0].timestamp).toLocaleString()}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75em; opacity: 0.8; text-transform: uppercase; margin-bottom: 5px;">Model</div>
+                                <div style="font-size: 0.9em;">gpt-5.1-codex-mini</div>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(header);
+                    
+                    // Add log entries
+                    data.forEach(entry => {
+                        const div = document.createElement('div');
+                        div.style.cssText = 'background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);';
+                        
+                        const time = new Date(entry.timestamp).toLocaleString();
+                        
+                        if (entry.role === 'user') {
+                            div.innerHTML = `
+                                <div style="font-size: 0.7em; color: #6b7280; margin-bottom: 8px; font-family: monospace;">${time}</div>
+                                <div style="background: #e0f2fe; color: #0369a1; padding: 3px 12px; border-radius: 16px; font-size: 0.75em; font-weight: 600; display: inline-block; margin-bottom: 10px;">You</div>
+                                <div style="margin-top: 12px; line-height: 1.6;">${entry.content}</div>
+                            `;
+                        } else {
+                            div.innerHTML = `
+                                <div style="font-size: 0.7em; color: #6b7280; margin-bottom: 8px; font-family: monospace;">${time}</div>
+                                <div style="background: #6b7280; color: white; padding: 3px 12px; border-radius: 16px; font-size: 0.75em; font-weight: 600; display: inline-block; margin-bottom: 10px;">Agent</div>
+                                <div style="margin-top: 12px; line-height: 1.6;">${entry.content}</div>
+                            `;
+                        }
+                        container.appendChild(div);
+                    });
+                })
+                .catch(err => {
+                    container.innerHTML = `<p style="color: #dc2626;">Error loading session log: ${err.message}</p>`;
+                });
+        }
+        
+        renderSessionLog();
+    </script>
+    </main>
+    
+    <footer class="footer">
+        <p>Paul's Appalachian Trail Journal</p>
+    </footer>
+</body>
+</html>
