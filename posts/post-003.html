@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Retro: Pinephone EMMC Setup - Paul's Appalachian Trail Journal</title>
+    <title>Pinephone eMMC Difficulties - Paul's Appalachian Trail Journal</title>
     <style>
         body {
             font-family: monospace;
@@ -73,9 +73,9 @@
         <article class="blog-post">
             <h3>
                 <span class="post-date">[2026-03-26]</span> 
-                <span class="post-mile">Retro: Pinephone EMMC Setup</span>
+                <span class="post-mile">Pinephone eMMC adventure</span>
             </h3>
-            <h1>Retro: Pinephone EMMC Setup</h1>
+            <h1>Pinephone eMMC adventure</h1>
             
             <p>hello friends!</p>
             
@@ -93,12 +93,11 @@
                 <h2>AI Dev Setup</h2>
                 <ul>
                     <li>gpt-5.1-codex-mini (thinking off - the horror!)</li>
-                    <li>pi-agent</li>
-                    <li>tmux</li>
+                    <li><a href="https://github.com/agentic-dev-io/pi-agent/tree/main/packages/coding-agent">pi-agent</a></li>
+                    <li><a href="https://github.com/tmux/tmux/wiki">tmux</a></li>
                 </ul>
             </div>
-            
-            <p>tmux is a terminal multiplexer. i love tmux and use it with everything, including pi-agent. i have a tmux skill that helps pi-agent interact with a tmux pane. i can say something like:</p>
+            <p>tmux is a terminal multiplexer. i love tmux and use it with everything, including pi-agent. i have a <a href="https://github.com/WillChangeThisLater/dotfiles/tree/main/pi/.pi/agent/skills/pi-skills/tmux">tmux skill</a> that helps pi-agent interact with a tmux pane. i can say something like:</p>
             
             <pre>
 "run commands against my pinephone. you can use this pane: pinephone.pi-agent:1. pinephone.pi-agent:1 is SSH'd into the pinephone"
@@ -108,16 +107,16 @@
             
             <p>i did all my work in a tmux session called `pinephone` with a window called `pi-agent`. my setup was simple: just two panes. the top pane is running `pi-agent`, the bottom is ssh'd into the pinephone.</p>
             
-            <p>that's it! sometimes the agent does need help though (e.g. if it needs to run a command with 'sudo'), and it's instructed to ask for it. though sometimes i will get lazy and give the agent the sudo password (147147, the system default).</p>
+            <p>that's it! sometimes the agent does need help though (e.g. if it needs to run a command with 'sudo'), and it's instructed to ask for it. though sometimes i will get lazy and give the agent the sudo password</p>
             
-            <p>gpt-5.1-codex-mini with thinking off is... not the brightest. i've tricked myself into thinking this is a good thing. the frontier models now are so strong they often get to my answer immediately and effortlessly. this usually requires little to no thinking on my part. helpful when i just need something done, but less helpful when i want to actually learn something. gpt-5.1-codex-mini isn't always right and screws up frequently, which is a feature since it means i have to think carefully when i'm interacting with it.</p>
+            <p>gpt-5.1-codex-mini with thinking off is... not the brightest. i've tricked myself into thinking this is a good thing. the frontier models now are so strong they often get to my answer immediately and effortlessly. i want a bit of a challenge ;)</p>
             
-            <p>to be honest i don't think i would have taken this much of a deep dive without an llm at my side. it's an incredible scout if you ask it good questions. i would never have done something like open up an initramfs file by myself, it would have been too foreign territory. this really excites me - i feel much more confident doing low level programming, an electronics project, etc. with an llm at my side.</p>
+            <p>to be honest i don't think i would have taken this much of a deep dive without an llm at my side. it's an incredible scout if you ask it good questions. i would never have done something like open up an initramfs file llm-less. i feel much more confident doing low level programming, an electronics project, etc. with an llm at my side. i've been learning a lot</p>
             
             <p>one broader takeaway for myself: i am starting to prefer real and tangible projects above all else. projects where you have real imperative proof that the thing works or it doesn't. llms are good for this since they can't dunning kruger you - you can see visually when a phone gose from failed boot to "starting".</p>
-            
+
             <div class="note">
-                <strong>system prompt i used for debugging agent</strong>
+                <strong>here's the base system prompt i used for my debugging session. it's about 150 lines long. it worked quite well</strong>
             </div>
             
             <pre style="height: 50vh; overflow-y: auto; max-height: 500px;">
@@ -196,13 +195,13 @@ bin   etc   lib    lost+found  opt   sbin  usr
 boot  home  lib64  media       root  srv   var
             </pre>
             
-            <h2>The Problem</h2>
+            <h2>Ok now the more technical stuff! Here's the Problem</h2>
             
             <p>the problem we are solving: system is booting off SD card instead of eMMC. this is a problem since if we lose the SD card we effectively brick the system.</p>
             
             <p>we realized this with lsblk. lsblk showed two block devices. the device that was in use, mmcblk0, had two partitions mounted to /boot and / respectively. mmcblk2 was present but not mounted anywhere. the reason we knew mmcblk2 was emmc is because mmcblk2 also contained mmcblk2boot0 and mmcblk2boot1, which contain the bootloader code.</p>
             
-            <h2>The dd Approach</h2>
+            <h2>`dd`</h2>
             
             <p>the usual tool for fixing this is dd. dd allows you to make block-level copies. the cool thing about dd is that it is filesystem unaware. in other words - you're not copying files, you're copying bytes. in theory this is very nice since we can use dd to make an exact copy of the boot and root partitions that exist on the SD card. the magic invocation for doing this is something along the lines of:</p>
             
@@ -239,7 +238,7 @@ sudo tune2fs /dev/mmcblk2p1 -U random
             
             <p>this may have been a dumb hill to die on, in retrospect.</p>
             
-            <h2>The mkfs + rsync Solution</h2>
+            <h2>mkfs + rsync to the rescue!</h2>
             
             <p>after enough bickering, codex suggested an alternative. instead of using dd to use a block-level, filesystem-unaware copy, we could use mkfs and rsync to make filesystem-aware copies on both the boot and root partitions. the idea was clean and elegant:</p>
             
@@ -259,7 +258,7 @@ sudo rsync -aHAX --numeric-ids --progress --exclude=/mnt --exclude=/dev --exclud
             
             <p>and this worked! or at least it seemed to. filesystem level checks looked good, and because we used mkfs to create the file system we didn't even have to generate separate UUIDs for the block devices - we can just use whatever mkfs gives us and plug that into /etc/fstab.</p>
             
-            <h2>The Boot Failure</h2>
+            <h2>mkfs + rsync to the rescue?</h2>
             
             <p>at this point it was time to boot and.... it failed :/</p>
             
@@ -269,18 +268,17 @@ sudo rsync -aHAX --numeric-ids --progress --exclude=/mnt --exclude=/dev --exclud
                 <strong>Boot Process Overview:</strong>
                 <ul>
                     <li>UBoot bootloader loads (from eMMC read-only)</li>
-                    <li>UBoot mounts boot partition and reads configuration</li>
+                    <li>UBoot mounts boot partition, does stuff, eventually runs boot.scr</li>
                     <li>Bootloader finishes and hands off to OS via init script</li>
-                    <li>boot.scr is a shell script with funky shebang</li>
-                    <li>Loads initramfs, kernel (vmlinuz), then boots kernel</li>
+                    <li>OS loads initramfs, kernel (vmlinuz), then boots kernel</li>
                 </ul>
             </div>
             
             <p>the bootloader is itself a kind of mini operating system. from what i see, the main job of the bootloader is to run boot.scr, which, to my eyes, is just a shell script with a very funky looking shebang line!</p>
             
-            <pre>
-'Vri:postmarketos
-gpio set 98
+            <pre style="height: 50vh; overflow-y: auto; max-height: 500px;">
+
+'Vri:postmarketosgpio set 98
 gpio set 114
 
 if test ${mmc_bootdev} -eq 0 ; then
@@ -289,12 +287,63 @@ if test ${mmc_bootdev} -eq 0 ; then
 else
         echo "Booting from eMMC";
         setenv bootdev 2;
+fi;
+
+setenv bootargs init=/init.sh rw console=tty0 console=ttyS0,115200 earlycon=uart,mmio32,0x01c28000 panic=10 consoleblank=0 loglevel=1 PMOS_FORCE_PARTITION_RESIZE pmos_boot=/dev/mmcblk${bootdev}p1 pmos_root=/dev/mmcblk${bootdev}p2
+
+printenv
+
+echo Detecting psci idle state
+fdt addr ${fdtcontroladdr}
+fdt get name pscifdt /cpus/idle-states /
+if test $? -eq 0; then
+        echo PSCI idle state enabled;
+        setenv iscpscienabled 1;
+else
+        echo PSCI idle state disabled;
 fi
+
+echo Loading DTB
+load mmc ${mmc_bootdev}:1 ${fdt_addr_r} ${fdtfile}
+fdt addr ${fdt_addr_r}
+fdt resize 2048
+
+if printenv ram_freq; then
+        echo Adding FTD RAM clock
+        fdt mknode / memory
+        fdt set /memory ram_freq ${ram_freq}
+fi
+
+if test ${iscpscienabled} -eq 1; then
+        echo Applying PSCI DTBO;
+        load mmc ${mmc_bootdev}:1 ${fdtoverlay_addr_r} sun50i-a64-psci.dtbo
+        fdt apply ${fdtoverlay_addr_r}
+fi
+
+echo Loading Initramfs
+load mmc ${mmc_bootdev}:1 ${ramdisk_addr_r} initramfs
+setenv ramdisk_size ${filesize}
+
+echo Loading Kernel
+load mmc ${mmc_bootdev}:1 ${kernel_addr_r} vmlinuz
+
+gpio set 115
+
+
+echo Loading user script
+setenv user_scriptaddr 0x50f00000
+load mmc ${mmc_bootdev}:1 ${user_scriptaddr} user.scr
+if test $? -eq 0; then source ${user_scriptaddr}; else echo No user script found; fi
+
+echo Booting kernel
+gpio set 116
+gpio clear 98
+booti ${kernel_addr_r} ${ramdisk_addr_r}:${ramdisk_size} ${fdt_addr_r}
             </pre>
             
-            <h2>initramfs Deep Dive</h2>
+            <h2>initramfs and splash screen fun</h2>
             
-            <p>initramfs is interesting. it's a tiny compressed cpio archive that the kernel loads into RAM before userspace starts. turns out this, not the root partition, is the file system that the operating system sees when it spins up. it looks roughly like this</p>
+            <p>ok so at this point we opted to try and find the splash screen code. initramfs is interesting. it's effectively the first file system the operating system 'sees' when it boots up. functionally initramfs is a tiny compressed cpio archive that the kernel loads into RAM before userspace starts. decompressed and blown up it looks roughly like this</p>
             
             <pre>
 initramfs
@@ -324,9 +373,7 @@ initramfs
             
             <p>those binaries in /usr/bin/ are real! you can run them with <a href="https://github.com/WillChangeThisLater/initramfs-playground">initramfs-playground</a> if you're curious.</p>
             
-            <h2>Splash Screen Debugging</h2>
-            
-            <p>there are a few layers in initramfs:</p>
+            <p>anyway there are a few layers in initramfs:</p>
             
             <ul>
                 <li>init is the initial init script, and the first thing the kernel runs in userspace. special file systems (like /proc, /dev) are mounted here. hands off control to init_2nd.sh pretty quickly</li>
@@ -345,7 +392,7 @@ echo "init stage 1 reached" > /dev/kmsg
             
             <p>and... success! at least partially. i could tell from the splash screens that the operating system got all the way through the second init script. investigating after i could see log lines coming through /mnt/emmcboot/var/log/dmesg as well, confirming this suspicion.</p>
             
-            <h2>Busybox and OpenRC</h2>
+            <h2>what the heck is a busy box?</h2>
             
             <p>but also what the fuck?! if the boot process is fine that must mean the problem is downstream. the final thing the init_2nd.sh script does is kick off /sbin/init on the root. what is that?</p>
             
@@ -403,6 +450,7 @@ depend() {
 }
             </pre>
             
+            <h2>SUCCESS!!</h2>
             <p>so i rebooted the phone and... success?!?!?! wait wtf i did not expect this at all why did adding a dumb debugging service fix the whole thing?! but after restarting a few more times and seeing the phone come up consistently i guess this fix was it?</p>
             
             <div class="note">
@@ -411,7 +459,7 @@ depend() {
             
             <p>to be completely honest, i'm still not sure exactly what the issue here was. from what i can surmise, there was some issue with open-rc at the default runlevel that was preventing it from staying up. codex gives the empty answer of "that extra step apparently satisfied whatever dependency or timing issue was preventing OpenRC from staying up - maybe the default runlevel expected /var/log/debug.log to exist, or the added service slowed down the startup so a later service's dependency was ready". a completely worthless resolution. i'd love to dive deeper at some point and get to a root cause, but for now it doesn't matter - the pinephone is up and running, all from eMMC :)</p>
             
-            <h2>What I Learned</h2>
+            <h2>so what did you learn son?</h2>
             
             <p>i learned a lot about:</p>
             
@@ -445,75 +493,6 @@ depend() {
         </article>
     </main>
     
-    <script>
-        // Session log data embedded from session-log-data.json
-        const sessionData = {
-            "role": "assistant",
-            "timestamp": "2026-03-24T17:34:15.403Z",
-            "content": ""
-        };
-        
-        // Render session log
-        function renderSessionLog() {
-            const container = document.getElementById('session-log-container');
-            if (!container) return;
-            
-            fetch('session-log-data.json')
-                .then(res => res.json())
-                .then(data => {
-                    // Add session header
-                    const header = document.createElement('div');
-                    header.style.cssText = 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px;';
-                    header.innerHTML = `
-                        <h2 style="margin: 0 0 10px 0;">AI Agent Session Log</h2>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.3);">
-                            <div>
-                                <div style="font-size: 0.75em; opacity: 0.8; text-transform: uppercase; margin-bottom: 5px;">Session ID</div>
-                                <div style="font-family: monospace; font-size: 0.85em;">${data[0].timestamp.substring(0, 20)}</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 0.75em; opacity: 0.8; text-transform: uppercase; margin-bottom: 5px;">Started</div>
-                                <div style="font-size: 0.9em;">${new Date(data[0].timestamp).toLocaleString()}</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 0.75em; opacity: 0.8; text-transform: uppercase; margin-bottom: 5px;">Model</div>
-                                <div style="font-size: 0.9em;">gpt-5.1-codex-mini</div>
-                            </div>
-                        </div>
-                    `;
-                    container.appendChild(header);
-                    
-                    // Add log entries
-                    data.forEach(entry => {
-                        const div = document.createElement('div');
-                        div.style.cssText = 'background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);';
-                        
-                        const time = new Date(entry.timestamp).toLocaleString();
-                        
-                        if (entry.role === 'user') {
-                            div.innerHTML = `
-                                <div style="font-size: 0.7em; color: #6b7280; margin-bottom: 8px; font-family: monospace;">${time}</div>
-                                <div style="background: #e0f2fe; color: #0369a1; padding: 3px 12px; border-radius: 16px; font-size: 0.75em; font-weight: 600; display: inline-block; margin-bottom: 10px;">You</div>
-                                <div style="margin-top: 12px; line-height: 1.6;">${entry.content}</div>
-                            `;
-                        } else {
-                            div.innerHTML = `
-                                <div style="font-size: 0.7em; color: #6b7280; margin-bottom: 8px; font-family: monospace;">${time}</div>
-                                <div style="background: #6b7280; color: white; padding: 3px 12px; border-radius: 16px; font-size: 0.75em; font-weight: 600; display: inline-block; margin-bottom: 10px;">Agent</div>
-                                <div style="margin-top: 12px; line-height: 1.6;">${entry.content}</div>
-                            `;
-                        }
-                        container.appendChild(div);
-                    });
-                })
-                .catch(err => {
-                    container.innerHTML = `<p style="color: #dc2626;">Error loading session log: ${err.message}</p>`;
-                });
-        }
-        
-        renderSessionLog();
-    </script>
-    </main>
     
     <footer class="footer">
         <p>Paul's Appalachian Trail Journal</p>

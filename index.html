@@ -14,9 +14,9 @@
             background: #f5f5f5;
             color: #333;
         }
-        h1 { font-size: 1.5em; border-bottom: 2px solid #333; }
+        h1 { font-size: 1.5em; border-bottom: 3px solid #28a745; padding-bottom: 10px; }
         h2 { font-size: 1.2em; border-bottom: 1px solid #ccc; margin-top: 2em; }
-        h3 { font-size: 1.1em; margin-top: 1.5em; }
+        h3 { font-size: 1em; margin-top: 1.5em; margin-bottom: 0.5em; }
         .progress-bar {
             background: #ddd;
             border: 1px solid #999;
@@ -25,40 +25,89 @@
         }
         .progress-container {
             width: 100%;
-            height: 30px;
+            height: 24px;
             background: #ddd;
             border: 1px solid #999;
         }
         .progress-fill {
             height: 100%;
-            background: #28a745;
+            background: linear-gradient(90deg, #28a745, #20c997);
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
             font-family: monospace;
-            transition: width 0.3s ease;
+            transition: width 0.5s ease;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #555;
         }
         .current-location {
             background: #e9ecef;
             border: 1px solid #ccc;
+            border-left: 4px solid #28a745;
             padding: 15px;
             margin: 20px 0;
         }
+        .current-location h2 {
+            margin-top: 0;
+            font-size: 1.1em;
+        }
+        .current-location p {
+            margin: 5px 0;
+        }
         .blog-post {
-            border: 1px solid #ccc;
-            padding: 15px;
-            margin: 15px 0;
+            border: 2px solid #28a745;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 25px 0;
             background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: box-shadow 0.2s ease;
+        }
+        .blog-post:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .post-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 12px;
         }
         .post-date {
-            color: #666;
-            font-size: 0.9em;
+            color: #999;
+            font-size: 0.75em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .post-mile {
             color: #28a745;
             font-weight: bold;
+            font-size: 1.1em;
+        }
+        .blog-post p {
+            margin: 8px 0;
+        }
+        .blog-post a {
+            color: #28a745;
+            text-decoration: none;
+            font-weight: bold;
+            display: inline-block;
+        }
+        .blog-post a:hover {
+            text-decoration: underline;
+        }
+        .blog-post p + p {
+            margin-top: 12px;
+        }
+        .blog-post p + a {
+            margin-top: 12px;
+            display: block;
+            font-size: 1.1em;
         }
         a { color: #0066cc; }
         .footer {
@@ -102,22 +151,29 @@
         <!-- Add your posts here in chronological order (newest first) -->
         
         <article class="blog-post">
-            <h3>
-                <span class="post-date">[2026-03-26]</span> 
-                <span class="post-mile">Retro: Pinephone EMMC Setup</span>
-            </h3>
-            <p>Deep dive into setting up pinephone EMMC with AI debugging</p>
+            <div class="post-header">
+                <span class="post-date">2026-03-26</span>
+                <span class="post-mile">Pinephone eMMC Adventures</span>
+            </div>
+            <p>Deep dive into setting up pinephone eMMC with AI debugging. I promise this is less boring than it sounds!</p>
             <p><a href="posts/post-003.html">Read more →</a></p>
         </article>
         
         <article class="blog-post">
-            <h3>
-                <span class="post-date">[2026-03-15]</span> 
-                <span class="post-mile">Home</span>
-            </h3>
+            <div class="post-header">
+                <span class="post-date">2026-03-15</span>
+                <span class="post-mile">Hello world - but from my main programming device for the AT, the humble pinephone :)</span>
+            </div>
             <p>Hello from my pinephone</p>
             <p><a href="posts/post-002.html">Read more →</a></p>
-            <p>Obligatory hello world post!</p>
+        </article>
+        
+        <article class="blog-post">
+            <div class="post-header">
+                <span class="post-date">2026-03-15</span>
+                <span class="post-mile">Obligatory hello world post!</span>
+            </div>
+            <p>Hello from my pinephone</p>
             <p><a href="posts/post-001.html">Read more →</a></p>
         </article>
         
