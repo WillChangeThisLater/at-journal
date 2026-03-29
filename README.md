@@ -1,6 +1,6 @@
 # Appalachian Trail Journal
 
-A minimalist blog for documenting my trials and tribulations on the A.T.
+Static site for my [hopefully minimalist blog](https://willchangethislater.github.io/at-journal/) which will document my trials and tribulations on the A.T.
 
 ## Quick Start
 
