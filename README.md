@@ -33,8 +33,12 @@ journal/
 2. Create a new file: `post-NNN.html`
    (Replace NNN with the next sequential number)
 3. Copy `post-001.html` as a template
-4. Update the post content
-5. Add a link in `index.html`:
+4. **IMPORTANT**: Update these values in the new post (they'll be copied from the template):
+   - **Location**: Change from "Titusville, NJ" to your current location (e.g., "Damascus, VA")
+   - **Progress**: Change from "0/2160 mi (0%)" to your current progress (e.g., "470/2160 mi (21.76%)")
+   - **Mile marker**: Update the meta data to reflect your actual mile (e.g., "470 mi")
+5. Update the post content
+6. Add a link in `index.html`:
    ```html
    <article class="blog-post">
        <h3>
